@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stefanhoth.yaz2health</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/stefan/go/bin/yaz2health</string>
+        <string>sync</string>
+    </array>
+
+    <!-- yazio CLI must be on PATH for the subprocess call -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/stefan/go/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- 3x daily: 10:00, 15:00, 21:00 -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/stefan/Library/Logs/yaz2health.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/stefan/Library/Logs/yaz2health.log</string>
+</dict>
+</plist>
