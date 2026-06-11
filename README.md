@@ -14,7 +14,7 @@ yazio CLI ──summary JSON──▶ mapper ──▶ planner (diff) ──▶ 
 
 ## Prerequisites
 
-1. **yazio CLI** installed and logged in (`yazio auth status` → `valid`).
+1. **[yazio CLI](https://github.com/itzptk/yazio-go-cli)** installed and logged in (`yazio auth status` → `valid`).
 2. **Google Cloud Project** with the [Google Health API](https://developers.google.com/health) enabled:
    - APIs & Services → Library → Search for "Google Health API" → Enable
    - OAuth Consent Screen: Create an app, add scopes `googlehealth.nutrition.readonly` and `googlehealth.nutrition.writeonly`
