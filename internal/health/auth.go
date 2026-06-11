@@ -18,17 +18,38 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+// installedCreds mirrors the "installed" section of a Desktop-app
+// client_secret.json. Google sometimes omits redirect_uris from the download;
+// we override RedirectURL in Login() anyway, so we parse manually to avoid
+// the strict validation in google.ConfigFromJSON.
+type installedCreds struct {
+	Installed struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	} `json:"installed"`
+}
+
 // LoadOAuthConfig parses a Google "Desktop app" client_secret.json.
 func LoadOAuthConfig(clientSecretPath string) (*oauth2.Config, error) {
 	data, err := os.ReadFile(clientSecretPath)
 	if err != nil {
 		return nil, fmt.Errorf("read client secret: %w", err)
 	}
-	cfg, err := google.ConfigFromJSON(data, Scopes...)
-	if err != nil {
+	var c installedCreds
+	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse client secret: %w", err)
 	}
-	return cfg, nil
+	if c.Installed.ClientID == "" {
+		return nil, fmt.Errorf("client secret: missing client_id — expected a Desktop app (\"installed\") credential file")
+	}
+	return &oauth2.Config{
+		ClientID:     c.Installed.ClientID,
+		ClientSecret: c.Installed.ClientSecret,
+		Endpoint:     google.Endpoint,
+		Scopes:       Scopes,
+		// RedirectURL is set dynamically to the loopback listener in Login().
+		RedirectURL: "http://localhost",
+	}, nil
 }
 
 // Login runs the OAuth desktop flow: it starts a loopback listener, opens
