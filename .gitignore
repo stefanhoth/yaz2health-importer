@@ -1,0 +1,8 @@
+# Credentials & tokens — never commit
+client_secret*.json
+token.json
+*.log
+
+# Build artifacts
+/bin/
+/dist/

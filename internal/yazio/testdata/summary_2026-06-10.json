@@ -1,0 +1,66 @@
+{
+  "activity_energy": 712.2828,
+  "consume_activity_energy": true,
+  "steps": 11916,
+  "water_intake": 1650,
+  "goals": {
+    "energy.energy": 2212.2828,
+    "water": 1500,
+    "activity.step": 10000,
+    "nutrient.protein": 73.1708,
+    "nutrient.fat": 48.3871,
+    "nutrient.carb": 182.9268,
+    "bodyvalue.weight": 90
+  },
+  "units": {
+    "unit_mass": "kg",
+    "unit_energy": "kcal",
+    "unit_serving": "g",
+    "unit_length": "cm"
+  },
+  "meals": {
+    "breakfast": {
+      "energy_goal": 663.6848399999999,
+      "nutrients": {
+        "energy.energy": 326.5,
+        "nutrient.carb": 30.450000000000003,
+        "nutrient.protein": 21.7,
+        "nutrient.fat": 9.9
+      }
+    },
+    "lunch": {
+      "energy_goal": 884.9131199999999,
+      "nutrients": {
+        "energy.energy": 408,
+        "nutrient.carb": 17,
+        "nutrient.protein": 27,
+        "nutrient.fat": 27
+      }
+    },
+    "dinner": {
+      "energy_goal": 553.0707,
+      "nutrients": {
+        "energy.energy": 783,
+        "nutrient.carb": 69,
+        "nutrient.protein": 26,
+        "nutrient.fat": 38
+      }
+    },
+    "snack": {
+      "energy_goal": 110.61413999999999,
+      "nutrients": {
+        "energy.energy": 107,
+        "nutrient.carb": 21,
+        "nutrient.protein": 4,
+        "nutrient.fat": 0
+      }
+    }
+  },
+  "user": {
+    "start_weight": 101,
+    "current_weight": 96.5,
+    "goal": "lose",
+    "sex": "male"
+  },
+  "active_fasting_countdown_template_key": null
+}
