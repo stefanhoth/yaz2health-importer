@@ -1,50 +1,50 @@
 # yaz2health
 
-Synct Ernährungsdaten (Kalorien, Makros) und Wasserzufuhr aus [Yazio](https://www.yazio.com) in **Google Health** — duplikatfrei, idempotent, als launchd-Job 3x täglich.
+Syncs nutrition data (calories, macros) and water intake from [Yazio](https://www.yazio.com) to **Google Health**, duplicate-free, idempotent, running as a launchd job 3x daily.
 
-## Wie es funktioniert
+## How it works
 
-```
 yazio CLI ──summary JSON──▶ mapper ──▶ planner (diff) ──▶ Google Health API v4
-                                          ▲
-                                          └── dataPoints.list (existing state)
-```
+▲
+└── dataPoints.list (existing state)
 
-- Pro Yazio-Tag entstehen bis zu 5 Datenpunkte: je ein `nutrition-log` pro Mahlzeit (Frühstück/Mittag/Snack/Abend mit kcal, Kohlenhydraten, Protein, Fett) und ein `hydration-log` für Wasser.
-- **Duplikatfreiheit:** Jeder Punkt bekommt eine deterministische Client-ID (`yazio-2026-06-11-lunch`). Vor jedem Schreiben wird der Ist-Zustand aus Google gelesen und gedifft: `create` / `patch` / `delete` / `skip`. Erneutes Ausführen ist immer idempotent. Punkte ohne `yazio-`-Präfix (z.B. manuell in der Health-App geloggt) werden nie angefasst.
-- Yazio-Tage sind UTC-basiert; die Tageszuordnung wird 1:1 übernommen. Mahlzeiten bekommen repräsentative Uhrzeiten (08/13/16/19 Uhr lokal, Wasser 12 Uhr), da Yazio nur den Tag kennt.
+- Up to 5 data points are created per Yazio day: one `nutrition-log` per meal (breakfast/lunch/snack/dinner with kcal, carbs, protein, fat) and one `hydration-log` for water.
+- **Duplicate Prevention:** Every point receives a deterministic client ID (`yazio-2026-06-11-lunch`). Before any write operation, the current state is read from Google and diffed: `create`, `patch`, `delete`, `skip`. Re-running the sync is always idempotent. Points without the `yazio-` prefix (e.g., logged manually in the Health app) are never modified.
+- Yazio days are UTC-based; the day assignment is transferred 1:1. Meals are assigned representative times (08:00 / 13:00 / 16:00 / 19:00 local time, water at 12:00) because Yazio only tracks the day.
 
-## Voraussetzungen
+## Prerequisites
 
-1. **yazio CLI** installiert und eingeloggt (`yazio auth status` → `valid`).
-2. **Google-Cloud-Projekt** mit aktivierter [Google Health API](https://developers.google.com/health):
-   - APIs & Services → Library → "Google Health API" → Enable
-   - OAuth Consent Screen: App anlegen, Scopes `googlehealth.nutrition.readonly` + `googlehealth.nutrition.writeonly` hinzufügen
-   - **Wichtig:** Publishing-Status auf **"In production"** stellen (nicht "Testing"). Im Testing-Modus laufen Refresh-Tokens nach 7 Tagen ab und der Cronjob bricht. Die "unverified app"-Warnung beim Login ist für die persönliche Nutzung unbedenklich (über "Advanced" bestätigen).
-   - Credentials → Create Credentials → OAuth client ID → Typ **"Desktop app"** → JSON herunterladen
+1. **yazio CLI** installed and logged in (`yazio auth status` → `valid`).
+2. **Google Cloud Project** with the [Google Health API](https://developers.google.com/health) enabled:
+   - APIs & Services → Library → Search for "Google Health API" → Enable
+   - OAuth Consent Screen: Create an app, add scopes `googlehealth.nutrition.readonly` and `googlehealth.nutrition.writeonly`
+   - **Important:** Set the publishing status to **"In production"** (not "Testing"). In testing mode, refresh tokens expire after 7 days, which breaks the cronjob. The "unverified app" warning during login can be safely ignored for personal use (confirm via "Advanced").
+   - Credentials → Create Credentials → OAuth client ID → Application type **"Desktop app"** → Download the JSON file
 
 ## Setup
 
 ```bash
-make install                     # baut nach $GOBIN (~/go/bin/yaz2health)
+make install                 # builds to $GOBIN (~/go/bin/yaz2health)
 
-# Einmalig: Google-Login (öffnet Browser)
+# One-time step: Google login (opens browser)
 yaz2health auth login --client-secret ~/Downloads/client_secret_*.json
 yaz2health auth status
+
 ```
 
-Token und Client-Secret liegen danach in `~/Library/Application Support/yaz2health/` (Mode 0600).
+Token and client secret are stored in `~/Library/Application Support/yaz2health/` (Mode 0600).
 
-## Benutzung
+## Usage
 
 ```bash
-yaz2health sync --dry-run        # zeigt geplante Aktionen, schreibt nichts
-yaz2health sync                  # heute + 3 Tage Lookback (Default)
-yaz2health sync --days 30        # Backfill: die letzten 30 Tage
+yaz2health sync --dry-run        # shows planned actions, writes nothing
+yaz2health sync                  # today + 3 days lookback (default)
+yaz2health sync --days 30        # backfill: the last 30 days
 yaz2health sync --from 2026-05-12 --to 2026-06-11
+
 ```
 
-Beispielausgabe:
+Example output:
 
 ```
 Syncing 2026-06-08..2026-06-11
@@ -52,9 +52,10 @@ create yazio-2026-06-10-breakfast (327 kcal)
 create yazio-2026-06-10-water (1650 ml)
 patch yazio-2026-06-09-dinner (650 kcal -> 783 kcal)
 created=2 patched=1 deleted=0 skipped=12
+
 ```
 
-## Automatisierung (launchd, 3x täglich)
+## Automation (launchd, 3x daily)
 
 ```bash
 cp launchd/com.stefanhoth.yaz2health.plist ~/Library/LaunchAgents/
@@ -64,28 +65,30 @@ launchctl load ~/Library/LaunchAgents/com.stefanhoth.yaz2health.plist
 launchctl list | grep yaz2health
 tail -f ~/Library/Logs/yaz2health.log
 
-# Sofort testweise auslösen
+# Trigger a manual test run immediately
 launchctl start com.stefanhoth.yaz2health
+
 ```
 
-Zeiten (10/15/21 Uhr) bei Bedarf in der Plist anpassen, danach `launchctl unload` + `load`.
+Adjust the times (10:00 / 15:00 / 21:00) in the plist if needed, followed by `launchctl unload` + `load`.
 
-## Entwicklung
+## Development
 
 ```bash
-make test    # Unit-Tests (Parser, Mapper, Diff-Planner, API-Sink gegen httptest)
+make test    # Unit tests (parser, mapper, diff planner, API sink against httptest)
 make vet
 make build   # ./bin/yaz2health
+
 ```
 
-Struktur: `internal/yazio` (Quelle, Subprocess) → `internal/domain` (Datenmodell) → `internal/mapper` (Tag → Punkte) → `internal/planner` (purer Diff) → `internal/health` (Google Health API v4 + OAuth) → `internal/syncer` (Orchestrierung).
+Structure: `internal/yazio` (source, subprocess) → `internal/domain` (data model) → `internal/mapper` (day → points) → `internal/planner` (pure diff) → `internal/health` (Google Health API v4 + OAuth) → `internal/syncer` (orchestration).
 
 ## Troubleshooting
 
-| Symptom | Ursache / Fix |
-|---|---|
-| `not logged in (run yaz2health auth login)` | OAuth-Flow noch nicht gelaufen oder Token gelöscht |
-| `token invalid or revoked` nach ~7 Tagen | Consent Screen steht auf "Testing" → auf "In production" stellen, neu einloggen |
-| `yazio summary ...: exit status 1` | yazio CLI nicht eingeloggt: `yazio auth login` |
-| `did not honor the client-provided data point ID` | Die API hat die Client-ID verworfen; Abbruch verhindert Duplikate. Bitte Issue aufmachen — das Verhalten der (neuen) Write-API hat sich geändert. |
-| Eintrag von gestern 23:30 fehlt am erwarteten Tag | Yazio bucht UTC-basiert; späte Einträge landen ggf. auf dem Folgetag. Der Lookback synct beide Tage korrekt. |
+| Symptom | Cause / Fix |
+| --- | --- |
+| `not logged in (run yaz2health auth login)` | OAuth flow has not been run yet or token was deleted |
+| `token invalid or revoked` after ~7 days | Consent screen is set to "Testing" → change to "In production", log in again |
+| `yazio summary ...: exit status 1` | yazio CLI is not logged in: run `yazio auth login` |
+| `did not honor the client-provided data point ID` | The API rejected the client ID; the abort prevents duplicates. Please open an issue, as the behavior of the (new) write API might have changed. |
+| Yesterday's 23:30 entry is missing from the expected day | Yazio logs entries based on UTC; late entries might end up on the following day. The lookback syncs both days correctly. |
