@@ -4,7 +4,6 @@ package health
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,11 +21,6 @@ var Scopes = []string{
 	"https://www.googleapis.com/auth/googlehealth.nutrition.readonly",
 	"https://www.googleapis.com/auth/googlehealth.nutrition.writeonly",
 }
-
-// ErrClientIDUnsupported means the API ignored our client-provided data
-// point ID. Without those IDs the importer cannot recognize its own points
-// on the next run, so continuing would create duplicates.
-var ErrClientIDUnsupported = errors.New("google health api did not honor the client-provided data point ID; aborting to avoid duplicates")
 
 // Sink reads and writes data points for one user.
 type Sink struct {
@@ -77,17 +71,15 @@ func (s *Sink) List(ctx context.Context, t domain.PointType, from, to string) ([
 	return points, nil
 }
 
-// Create inserts a new data point under the point's deterministic client ID
-// and verifies the API kept it.
+// Create inserts a new data point, requesting the deterministic client ID in
+// the name field. The Google Health API may or may not echo the name back in
+// the response (it's a new endpoint); duplicate prevention is handled by the
+// semantic fallback in the planner rather than relying on this response.
 func (s *Sink) Create(ctx context.Context, p domain.Point) error {
 	dp := s.toDataPoint(p)
 	dp.Name = s.parent(p.Type) + "/dataPoints/" + p.ID
-	created, err := s.svc.Users.DataTypes.DataPoints.Create(s.parent(p.Type), dp).Context(ctx).Do()
-	if err != nil {
+	if _, err := s.svc.Users.DataTypes.DataPoints.Create(s.parent(p.Type), dp).Context(ctx).Do(); err != nil {
 		return fmt.Errorf("create %s: %w", p.ID, err)
-	}
-	if !strings.HasSuffix(created.Name, "/"+p.ID) {
-		return fmt.Errorf("%w (sent %s, got %s)", ErrClientIDUnsupported, p.ID, created.Name)
 	}
 	return nil
 }

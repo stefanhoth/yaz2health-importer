@@ -3,7 +3,6 @@ package health
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,23 +85,23 @@ func TestCreateSendsClientIDAndPayload(t *testing.T) {
 	}
 }
 
-func TestCreateFailsLoudlyWhenClientIDIgnored(t *testing.T) {
-	sink := newTestSink(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Server assigns its own ID instead of keeping ours.
-		json.NewEncoder(w).Encode(map[string]any{
-			"name": "users/me/dataTypes/hydration-log/dataPoints/server-generated-id",
+func TestCreateSucceedsWhenResponseNameEmptyOrDiffers(t *testing.T) {
+	// The Google Health API may return an empty name in the Create response
+	// (observed in the wild). Duplicate prevention is handled by the planner's
+	// semantic fallback, not by this response check.
+	for _, respName := range []string{"", "users/me/dataTypes/hydration-log/dataPoints/server-uuid"} {
+		sink := newTestSink(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]any{"name": respName})
+		}))
+		err := sink.Create(context.Background(), domain.Point{
+			ID:      "yazio-2026-06-10-water",
+			Type:    domain.HydrationPoint,
+			Date:    "2026-06-10",
+			WaterML: 1650,
 		})
-	}))
-
-	err := sink.Create(context.Background(), domain.Point{
-		ID:      "yazio-2026-06-10-water",
-		Type:    domain.HydrationPoint,
-		Date:    "2026-06-10",
-		WaterML: 1650,
-	})
-
-	if !errors.Is(err, ErrClientIDUnsupported) {
-		t.Fatalf("err = %v, want ErrClientIDUnsupported", err)
+		if err != nil {
+			t.Errorf("respName=%q: unexpected error: %v", respName, err)
+		}
 	}
 }
 
