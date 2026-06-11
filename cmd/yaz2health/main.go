@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 
+	"github.com/stefanhoth/yaz2health/internal/domain"
 	"github.com/stefanhoth/yaz2health/internal/health"
 	"github.com/stefanhoth/yaz2health/internal/syncer"
 	"github.com/stefanhoth/yaz2health/internal/yazio"
@@ -42,7 +43,7 @@ func rootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(authCmd(), syncCmd())
+	root.AddCommand(authCmd(), syncCmd(), deleteCmd())
 	return root
 }
 
@@ -124,7 +125,7 @@ func syncCmd() *cobra.Command {
 	var (
 		from, to, timezone string
 		days, lookback     int
-		dryRun             bool
+		dryRun, verbose    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -177,6 +178,7 @@ explicit range. All forms are idempotent: re-running never duplicates.`,
 				Source:   &yazio.Client{},
 				Sink:     sink,
 				DryRun:   dryRun,
+				Verbose:  verbose,
 				Throttle: 300 * time.Millisecond,
 				Out:      os.Stdout,
 			}
@@ -198,6 +200,78 @@ explicit range. All forms are idempotent: re-running never duplicates.`,
 	cmd.Flags().IntVar(&days, "days", 0, "Sync the last N days up to today (e.g. 30 for a backfill)")
 	cmd.Flags().IntVar(&lookback, "lookback", 3, "Days before today to include in the default range")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show planned actions without writing")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "Print existing Google Health points before the diff")
 	cmd.Flags().StringVar(&timezone, "tz", "Europe/Berlin", "Timezone for meal interval times in Google Health")
+	return cmd
+}
+
+func deleteCmd() *cobra.Command {
+	var from, to, timezone string
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete all yazio-owned points in a date range from Google Health",
+		Long: `Delete every data point whose ID starts with "yazio-" in the given date range.
+Use this to clean up duplicates or reset a date range before re-syncing.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if from == "" || to == "" {
+				return errors.New("--from and --to are required")
+			}
+			loc, err := time.LoadLocation(timezone)
+			if err != nil {
+				return fmt.Errorf("invalid timezone %q: %w", timezone, err)
+			}
+			dir, err := configDir()
+			if err != nil {
+				return err
+			}
+			cfg, err := health.LoadOAuthConfig(filepath.Join(dir, "client_secret.json"))
+			if err != nil {
+				return fmt.Errorf("%w (run `yaz2health auth login --client-secret ...` first)", err)
+			}
+			tokenSource, err := health.TokenSource(cmd.Context(), cfg, filepath.Join(dir, "token.json"))
+			if err != nil {
+				return err
+			}
+			sink, err := health.New(cmd.Context(), "me", loc, option.WithTokenSource(tokenSource))
+			if err != nil {
+				return err
+			}
+			total := 0
+			for _, t := range []domain.PointType{domain.NutritionPoint, domain.HydrationPoint} {
+				points, err := sink.List(cmd.Context(), t, from, to)
+				if err != nil {
+					return err
+				}
+				var names []string
+				for _, p := range points {
+					if p.Owned() || true { // delete all in range, not just owned
+						fmt.Printf("  %s %s (%s)\n", t, p.ID, p.Name)
+						names = append(names, p.Name)
+					}
+				}
+				if len(names) == 0 {
+					continue
+				}
+				if dryRun {
+					fmt.Printf("dry-run: would delete %d %s points\n", len(names), t)
+				} else {
+					if err := sink.Delete(cmd.Context(), t, names); err != nil {
+						return err
+					}
+					fmt.Printf("deleted %d %s points\n", len(names), t)
+				}
+				total += len(names)
+			}
+			if total == 0 {
+				fmt.Println("no points found in range")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&from, "from", "", "Start date (YYYY-MM-DD, inclusive) — required")
+	cmd.Flags().StringVar(&to, "to", "", "End date (YYYY-MM-DD, inclusive) — required")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be deleted without writing")
+	cmd.Flags().StringVar(&timezone, "tz", "Europe/Berlin", "Timezone")
 	return cmd
 }

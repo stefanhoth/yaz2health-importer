@@ -32,6 +32,8 @@ type Syncer struct {
 	Sink   Sink
 	// DryRun logs planned actions without writing.
 	DryRun bool
+	// Verbose logs existing points read from Google Health before the diff.
+	Verbose bool
 	// Throttle is slept between Yazio fetches to respect rate limits on
 	// long backfills.
 	Throttle time.Duration
@@ -74,6 +76,14 @@ func (s *Syncer) Run(ctx context.Context, from, to string) (Stats, error) {
 			return Stats{}, err
 		}
 		existing = append(existing, points...)
+	}
+
+	if s.Verbose {
+		s.logf("existing points from Google Health (%d):", len(existing))
+		for _, p := range existing {
+			s.logf("  id=%q name=%q type=%s date=%q meal=%q water=%.0f kcal=%.0f",
+				p.ID, p.Name, p.Type, p.Date, p.Meal, p.WaterML, p.Macros.EnergyKcal)
+		}
 	}
 
 	return s.apply(ctx, planner.Plan(desired, existing))
