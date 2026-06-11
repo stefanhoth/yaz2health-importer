@@ -18,12 +18,12 @@
         <string>/Users/stefan/go/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
     </dict>
 
-    <!-- 3x daily: 10:00, 15:00, 21:00 -->
+    <!-- 3x daily: 9:00, 15:00, 22:00 -->
     <key>StartCalendarInterval</key>
     <array>
-        <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>StandardOutPath</key>
