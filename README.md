@@ -1,12 +1,14 @@
 # yaz2health
 
-Syncs nutrition data (calories, macros) and water intake from [Yazio](https://www.yazio.com) to **Google Health**, duplicate-free, idempotent, running as a launchd job 3x daily.
+Syncs nutrition data (calories, macros) and water intake from [Yazio](https://www.yazio.com) to **Google Health**, duplicate-free, idempotent, running hourly via launchd.
 
 ## How it works
 
+```
 yazio CLI ──summary JSON──▶ mapper ──▶ planner (diff) ──▶ Google Health API v4
-▲
-└── dataPoints.list (existing state)
+                                          ▲
+                                          └── dataPoints.list (existing state)
+```
 
 - Up to 5 data points are created per Yazio day: one `nutrition-log` per meal (breakfast/lunch/snack/dinner with kcal, carbs, protein, fat) and one `hydration-log` for water.
 - **Duplicate Prevention:** Every point receives a deterministic client ID (`yazio-2026-06-11-lunch`). Before any write operation, the current state is read from Google and diffed: `create`, `patch`, `delete`, `skip`. Re-running the sync is always idempotent. Points without the `yazio-` prefix (e.g., logged manually in the Health app) are never modified.
@@ -29,7 +31,6 @@ make install                 # builds to $GOBIN (~/go/bin/yaz2health)
 # One-time step: Google login (opens browser)
 yaz2health auth login --client-secret ~/Downloads/client_secret_*.json
 yaz2health auth status
-
 ```
 
 Token and client secret are stored in `~/Library/Application Support/yaz2health/` (Mode 0600).
@@ -41,7 +42,6 @@ yaz2health sync --dry-run        # shows planned actions, writes nothing
 yaz2health sync                  # today + 3 days lookback (default)
 yaz2health sync --days 30        # backfill: the last 30 days
 yaz2health sync --from 2026-05-12 --to 2026-06-11
-
 ```
 
 Example output:
@@ -52,33 +52,40 @@ create yazio-2026-06-10-breakfast (327 kcal)
 create yazio-2026-06-10-water (1650 ml)
 patch yazio-2026-06-09-dinner (650 kcal -> 783 kcal)
 created=2 patched=1 deleted=0 skipped=12
-
 ```
 
-## Automation (launchd, 3x daily)
+## Automation (launchd)
+
+Two jobs cover different cadences:
+
+| Job | Schedule | Command |
+|-----|----------|---------|
+| `com.stefanhoth.yaz2health.backfill` | daily at 07:00 | `sync` (today + 3-day lookback) |
+| `com.stefanhoth.yaz2health.hourly` | hourly 09:00–22:00 | `sync --days 1` (today only) |
 
 ```bash
-cp launchd/com.stefanhoth.yaz2health.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.stefanhoth.yaz2health.plist
+cp launchd/com.stefanhoth.yaz2health.backfill.plist ~/Library/LaunchAgents/
+cp launchd/com.stefanhoth.yaz2health.hourly.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.stefanhoth.yaz2health.backfill.plist
+launchctl load ~/Library/LaunchAgents/com.stefanhoth.yaz2health.hourly.plist
 
-# Status & Log
+# Status & logs
 launchctl list | grep yaz2health
 tail -f ~/Library/Logs/yaz2health.log
 
 # Trigger a manual test run immediately
-launchctl start com.stefanhoth.yaz2health
-
+launchctl start com.stefanhoth.yaz2health.backfill
+launchctl start com.stefanhoth.yaz2health.hourly
 ```
 
-Adjust the times (10:00 / 15:00 / 21:00) in the plist if needed, followed by `launchctl unload` + `load`.
+To adjust the schedule, edit the plist files, then `launchctl unload` + `load`.
 
 ## Development
 
 ```bash
-make test    # Unit tests (parser, mapper, diff planner, API sink against httptest)
+make test    # unit tests (parser, mapper, diff planner, API sink against httptest)
 make vet
 make build   # ./bin/yaz2health
-
 ```
 
 Structure: `internal/yazio` (source, subprocess) → `internal/domain` (data model) → `internal/mapper` (day → points) → `internal/planner` (pure diff) → `internal/health` (Google Health API v4 + OAuth) → `internal/syncer` (orchestration).
@@ -86,9 +93,9 @@ Structure: `internal/yazio` (source, subprocess) → `internal/domain` (data mod
 ## Troubleshooting
 
 | Symptom | Cause / Fix |
-| --- | --- |
+|---|---|
 | `not logged in (run yaz2health auth login)` | OAuth flow has not been run yet or token was deleted |
 | `token invalid or revoked` after ~7 days | Consent screen is set to "Testing" → change to "In production", log in again |
 | `yazio summary ...: exit status 1` | yazio CLI is not logged in: run `yazio auth login` |
-| `did not honor the client-provided data point ID` | The API rejected the client ID; the abort prevents duplicates. Please open an issue, as the behavior of the (new) write API might have changed. |
+| `did not honor the client-provided data point ID` | The API rejected the client ID; the abort prevents duplicates. Please open an issue — the behavior of the (new) write API may have changed. |
 | Yesterday's 23:30 entry is missing from the expected day | Yazio logs entries based on UTC; late entries might end up on the following day. The lookback syncs both days correctly. |
