@@ -94,15 +94,34 @@ func (s *Sink) Patch(ctx context.Context, name string, p domain.Point) error {
 }
 
 // Delete removes data points of one type by their full resource names.
+// Points not owned by this OAuth client (DATA_POINT_NOT_OWNED_BY_CLIENT) are
+// silently skipped — they belong to another app (e.g. Yazio's own sync).
 func (s *Sink) Delete(ctx context.Context, t domain.PointType, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
 	req := &healthapi.BatchDeleteDataPointsRequest{Names: names}
 	if _, err := s.svc.Users.DataTypes.DataPoints.BatchDelete(s.parent(t), req).Context(ctx).Do(); err != nil {
+		if isNotOwned(err) {
+			// Batch failed because at least one point is foreign. Retry one-by-one.
+			for _, name := range names {
+				single := &healthapi.BatchDeleteDataPointsRequest{Names: []string{name}}
+				if _, err2 := s.svc.Users.DataTypes.DataPoints.BatchDelete(s.parent(t), single).Context(ctx).Do(); err2 != nil {
+					if isNotOwned(err2) {
+						continue // silently skip foreign points
+					}
+					return fmt.Errorf("delete %s: %w", name, err2)
+				}
+			}
+			return nil
+		}
 		return fmt.Errorf("batch delete %d %s points: %w", len(names), t, err)
 	}
 	return nil
+}
+
+func isNotOwned(err error) bool {
+	return strings.Contains(err.Error(), "DATA_POINT_NOT_OWNED_BY_CLIENT")
 }
 
 // Representative local times for each diary section. Yazio only knows the
