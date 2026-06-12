@@ -43,9 +43,9 @@ func semKeyOf(p domain.Point) semKey {
 // Plan diffs desired against existing points. Both slices must cover the same
 // date range. Each desired point is matched against existing by semantic key
 // (date + type + meal); unmatched desired points are created, matched points
-// are skipped or patched. Existing points with no desired counterpart are left
-// untouched — we cannot distinguish our own points from those created by other
-// apps because Google Health does not preserve client-provided IDs.
+// are skipped or patched. Existing points with no desired counterpart are
+// marked for deletion — the API enforces ownership and will silently reject
+// attempts to delete points created by other apps or the user directly.
 // Actions are ordered by point ID for stable output.
 func Plan(desired, existing []domain.Point) []Action {
 	existingBySem := make(map[semKey]domain.Point, len(existing))
@@ -64,6 +64,11 @@ func Plan(desired, existing []domain.Point) []Action {
 		default:
 			actions = append(actions, Action{Op: OpPatch, Desired: want, Existing: have})
 		}
+		delete(existingBySem, semKeyOf(want))
+	}
+
+	for _, have := range existingBySem {
+		actions = append(actions, Action{Op: OpDelete, Existing: have})
 	}
 
 	sort.Slice(actions, func(i, j int) bool {

@@ -79,17 +79,16 @@ func TestPlanPatchWhenValuesChanged(t *testing.T) {
 	}
 }
 
-func TestPlanLeavesUnmatchedExistingUntouched(t *testing.T) {
-	// Points in Google Health that have no desired counterpart (e.g. logged by
-	// another app, or removed in Yazio) are left untouched because we cannot
-	// distinguish our own points from foreign ones without client ID ownership.
-	unmatched := existingPoint("9999999999", 250)
-	unmatched.Meal = domain.Dinner // different meal → no semantic match
+func TestPlanDeleteWhenRemovedInYazio(t *testing.T) {
+	// Points with no desired counterpart are marked for deletion. The API
+	// enforces ownership and will silently reject deletes for foreign points.
+	actions := Plan(nil, []domain.Point{existingPoint("1234567890", 408)})
 
-	actions := Plan(nil, []domain.Point{unmatched})
-
-	if len(actions) != 0 {
-		t.Fatalf("got %+v, want no actions on unmatched existing points", actions)
+	if len(actions) != 1 || actions[0].Op != OpDelete {
+		t.Fatalf("got %+v, want one delete", actions)
+	}
+	if actions[0].Existing.Name == "" {
+		t.Error("delete action lost the existing resource name")
 	}
 }
 
@@ -135,6 +134,7 @@ func TestPlanMixedDay(t *testing.T) {
 	want := map[string]Op{
 		"yazio-2026-06-10-breakfast": OpCreate,
 		"yazio-2026-06-10-lunch":     OpPatch,
+		"1000000002":                 OpDelete,
 		"yazio-2026-06-10-water":     OpSkip,
 	}
 	if len(got) != len(want) {
