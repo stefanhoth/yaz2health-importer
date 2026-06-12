@@ -4,12 +4,29 @@
 
 - **Always work on a branch.** Never commit directly to `main`.
 - **Open a PR for every change**, no matter how small. Merge via GitHub (or `gh pr merge`).
-- Branch naming: `fix/<slug>`, `feat/<slug>`, `chore/<slug>`.
+- Follow **Conventional Commits** for branch names, commit messages, and PR titles:
+
+| Type | When to use |
+|------|-------------|
+| `feat` | new user-facing functionality |
+| `fix` | bug fix |
+| `chore` | maintenance, dependencies, config |
+| `docs` | documentation only |
+| `refactor` | code change with no behaviour change |
+| `test` | adding or fixing tests |
+| `ci` | CI/CD pipeline changes |
+
+Branch naming: `<type>/<short-slug>` — e.g. `fix/patch-500-fallback`, `feat/delete-command`.
+
+Commit messages: `<type>(<optional-scope>): <description>` — e.g. `fix(sink): retry on HTTP 5xx`.
+
+PR titles follow the same format as commit messages.
 
 ```bash
 git checkout -b fix/some-bug
-# ... make changes, commit ...
-gh pr create --fill
+# ... make changes ...
+git commit -m "fix(syncer): fall back to delete+create on patch 500"
+gh pr create --title "fix(syncer): fall back to delete+create on patch 500" --fill
 ```
 
 ## Build & test
