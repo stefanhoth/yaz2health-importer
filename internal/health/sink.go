@@ -4,11 +4,13 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	healthapi "google.golang.org/api/health/v4"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
 	"github.com/stefanhoth/yaz2health/internal/domain"
@@ -78,19 +80,23 @@ func (s *Sink) List(ctx context.Context, t domain.PointType, from, to string) ([
 func (s *Sink) Create(ctx context.Context, p domain.Point) error {
 	dp := s.toDataPoint(p)
 	dp.Name = s.parent(p.Type) + "/dataPoints/" + p.ID
-	if _, err := s.svc.Users.DataTypes.DataPoints.Create(s.parent(p.Type), dp).Context(ctx).Do(); err != nil {
-		return fmt.Errorf("create %s: %w", p.ID, err)
-	}
-	return nil
+	return retryWrite(func() error {
+		if _, err := s.svc.Users.DataTypes.DataPoints.Create(s.parent(p.Type), dp).Context(ctx).Do(); err != nil {
+			return fmt.Errorf("create %s: %w", p.ID, err)
+		}
+		return nil
+	})
 }
 
 // Patch replaces the values of an existing data point identified by its
 // full resource name.
 func (s *Sink) Patch(ctx context.Context, name string, p domain.Point) error {
-	if _, err := s.svc.Users.DataTypes.DataPoints.Patch(name, s.toDataPoint(p)).Context(ctx).Do(); err != nil {
-		return fmt.Errorf("patch %s: %w", name, err)
-	}
-	return nil
+	return retryWrite(func() error {
+		if _, err := s.svc.Users.DataTypes.DataPoints.Patch(name, s.toDataPoint(p)).Context(ctx).Do(); err != nil {
+			return fmt.Errorf("patch %s: %w", name, err)
+		}
+		return nil
+	})
 }
 
 // Delete removes data points of one type by their full resource names.
@@ -122,6 +128,25 @@ func (s *Sink) Delete(ctx context.Context, t domain.PointType, names []string) e
 
 func isNotOwned(err error) bool {
 	return strings.Contains(err.Error(), "DATA_POINT_NOT_OWNED_BY_CLIENT")
+}
+
+// retryWrite retries fn up to 3 times on HTTP 5xx responses, which the new
+// Google Health write API occasionally returns for transient backend errors.
+func retryWrite(fn func() error) error {
+	const attempts = 3
+	for i := range attempts {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		var gErr *googleapi.Error
+		if i < attempts-1 && errors.As(err, &gErr) && gErr.Code >= 500 {
+			time.Sleep(time.Duration(1<<uint(i)) * time.Second) // 1s, 2s
+			continue
+		}
+		return err
+	}
+	return nil
 }
 
 // Representative local times for each diary section. Yazio only knows the
