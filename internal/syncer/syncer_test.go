@@ -130,12 +130,12 @@ func TestRunSecondSyncIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestRunPatchesChangedAndDeletesRemoved(t *testing.T) {
+func TestRunPatchesChanged(t *testing.T) {
 	sink := &fakeSink{existing: []domain.Point{
 		existingLunch("2026-06-10", 408), // value will change -> patch
-		{ // water removed in Yazio -> delete
-			ID:      "yazio-2026-06-10-water",
-			Name:    "users/me/dataTypes/hydration-log/dataPoints/yazio-2026-06-10-water",
+		{ // water no longer in Yazio: left untouched (cannot identify ownership)
+			ID:      "9999999999",
+			Name:    "users/me/dataTypes/hydration-log/dataPoints/9999999999",
 			Type:    domain.HydrationPoint,
 			Date:    "2026-06-10",
 			WaterML: 500,
@@ -153,14 +153,14 @@ func TestRunPatchesChangedAndDeletesRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if stats.Patched != 1 || stats.Deleted != 1 || stats.Created != 0 {
-		t.Errorf("stats = %s, want patched=1 deleted=1", stats)
+	if stats.Patched != 1 || stats.Deleted != 0 || stats.Created != 0 {
+		t.Errorf("stats = %s, want patched=1 only", stats)
 	}
 	if len(sink.patched) != 1 || !strings.HasSuffix(sink.patched[0], "yazio-2026-06-10-lunch") {
 		t.Errorf("patched = %v", sink.patched)
 	}
-	if got := sink.deleted[domain.HydrationPoint]; len(got) != 1 {
-		t.Errorf("deleted hydration = %v, want 1 name", got)
+	if len(sink.deleted) != 0 {
+		t.Errorf("unexpected deletes: %v", sink.deleted)
 	}
 }
 

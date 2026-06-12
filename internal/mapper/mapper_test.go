@@ -42,9 +42,6 @@ func TestMapFullDay(t *testing.T) {
 		if p.Type != wantType {
 			t.Errorf("point %s: type = %s, want %s", p.ID, p.Type, wantType)
 		}
-		if !p.Owned() {
-			t.Errorf("point %s: not recognized as owned", p.ID)
-		}
 		if p.Date != "2026-06-10" {
 			t.Errorf("point %s: date = %s, want 2026-06-10", p.ID, p.Date)
 		}

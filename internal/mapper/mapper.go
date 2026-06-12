@@ -40,5 +40,5 @@ func Map(s domain.DaySummary) []domain.Point {
 // PointID builds the deterministic client-provided data point ID. The API
 // requires 4-63 chars of lowercase letters, digits, and hyphens.
 func PointID(date, suffix string) string {
-	return fmt.Sprintf("%s%s-%s", domain.OwnedIDPrefix, date, suffix)
+	return fmt.Sprintf("yazio-%s-%s", date, suffix)
 }
