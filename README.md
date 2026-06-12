@@ -97,5 +97,5 @@ Structure: `internal/yazio` (source, subprocess) → `internal/domain` (data mod
 | `not logged in (run yaz2health auth login)` | OAuth flow has not been run yet or token was deleted |
 | `token invalid or revoked` after ~7 days | Consent screen is set to "Testing" → change to "In production", log in again |
 | `yazio summary ...: exit status 1` | yazio CLI is not logged in: run `yazio auth login` |
-| `did not honor the client-provided data point ID` | The API rejected the client ID; the abort prevents duplicates. Please open an issue — the behavior of the (new) write API may have changed. |
+| `patch failed (...), retrying as delete+create` | Google Health's Patch endpoint returned a 500; the tool automatically falls back to delete + create. Normal behaviour on this new API. |
 | Yesterday's 23:30 entry is missing from the expected day | Yazio logs entries based on UTC; late entries might end up on the following day. The lookback syncs both days correctly. |
