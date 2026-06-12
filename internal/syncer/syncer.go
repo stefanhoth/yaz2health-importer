@@ -110,7 +110,15 @@ func (s *Syncer) apply(ctx context.Context, actions []planner.Action) (Stats, er
 			s.logf("%s %s (%s -> %s)", action.Op, action.Desired.ID, describe(action.Existing), describe(action.Desired))
 			if !s.DryRun {
 				if err := s.Sink.Patch(ctx, action.Existing.Name, action.Desired); err != nil {
-					return stats, err
+					// Google Health's Patch endpoint returns 500 for some points; fall
+					// back to delete + create which is more reliable on this new API.
+					s.logf("patch failed (%v), retrying as delete+create", err)
+					if err2 := s.Sink.Delete(ctx, action.Existing.Type, []string{action.Existing.Name}); err2 != nil {
+						return stats, fmt.Errorf("patch fallback delete: %w", err2)
+					}
+					if err2 := s.Sink.Create(ctx, action.Desired); err2 != nil {
+						return stats, fmt.Errorf("patch fallback create: %w", err2)
+					}
 				}
 			}
 			stats.Patched++
