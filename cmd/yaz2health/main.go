@@ -245,10 +245,8 @@ Use this to clean up duplicates or reset a date range before re-syncing.`,
 				}
 				var names []string
 				for _, p := range points {
-					if p.Owned() || true { // delete all in range, not just owned
-						fmt.Printf("  %s %s (%s)\n", t, p.ID, p.Name)
-						names = append(names, p.Name)
-					}
+					fmt.Printf("  %s %s (%s)\n", t, p.ID, p.Name)
+					names = append(names, p.Name)
 				}
 				if len(names) == 0 {
 					continue

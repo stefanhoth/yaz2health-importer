@@ -16,10 +16,17 @@ func nutritionPoint(id string, kcal float64) domain.Point {
 	}
 }
 
-func existingPoint(id string, kcal float64) domain.Point {
-	p := nutritionPoint(id, kcal)
-	p.Name = "users/u1/dataTypes/nutrition-log/dataPoints/" + id
-	return p
+// existingPoint simulates a point returned by Google Health: server-assigned
+// numeric ID, full resource Name, same values as the desired point.
+func existingPoint(serverID string, kcal float64) domain.Point {
+	return domain.Point{
+		ID:     serverID,
+		Name:   "users/u1/dataTypes/nutrition-log/dataPoints/" + serverID,
+		Type:   domain.NutritionPoint,
+		Date:   "2026-06-10",
+		Meal:   domain.Lunch,
+		Macros: domain.Macros{EnergyKcal: kcal, CarbsG: 17, ProteinG: 27, FatG: 27},
+	}
 }
 
 func TestPlanCreateWhenMissing(t *testing.T) {
@@ -36,7 +43,7 @@ func TestPlanCreateWhenMissing(t *testing.T) {
 func TestPlanSkipWhenIdentical(t *testing.T) {
 	actions := Plan(
 		[]domain.Point{nutritionPoint("yazio-2026-06-10-lunch", 408)},
-		[]domain.Point{existingPoint("yazio-2026-06-10-lunch", 408)},
+		[]domain.Point{existingPoint("1234567890", 408)},
 	)
 
 	if len(actions) != 1 || actions[0].Op != OpSkip {
@@ -47,7 +54,7 @@ func TestPlanSkipWhenIdentical(t *testing.T) {
 func TestPlanSkipWithinTolerance(t *testing.T) {
 	actions := Plan(
 		[]domain.Point{nutritionPoint("yazio-2026-06-10-lunch", 408)},
-		[]domain.Point{existingPoint("yazio-2026-06-10-lunch", 408.005)},
+		[]domain.Point{existingPoint("1234567890", 408.005)},
 	)
 
 	if len(actions) != 1 || actions[0].Op != OpSkip {
@@ -58,7 +65,7 @@ func TestPlanSkipWithinTolerance(t *testing.T) {
 func TestPlanPatchWhenValuesChanged(t *testing.T) {
 	actions := Plan(
 		[]domain.Point{nutritionPoint("yazio-2026-06-10-lunch", 520)},
-		[]domain.Point{existingPoint("yazio-2026-06-10-lunch", 408)},
+		[]domain.Point{existingPoint("1234567890", 408)},
 	)
 
 	if len(actions) != 1 || actions[0].Op != OpPatch {
@@ -73,7 +80,9 @@ func TestPlanPatchWhenValuesChanged(t *testing.T) {
 }
 
 func TestPlanDeleteWhenRemovedInYazio(t *testing.T) {
-	actions := Plan(nil, []domain.Point{existingPoint("yazio-2026-06-10-lunch", 408)})
+	// Points with no desired counterpart are marked for deletion. The API
+	// enforces ownership and will silently reject deletes for foreign points.
+	actions := Plan(nil, []domain.Point{existingPoint("1234567890", 408)})
 
 	if len(actions) != 1 || actions[0].Op != OpDelete {
 		t.Fatalf("got %+v, want one delete", actions)
@@ -83,18 +92,6 @@ func TestPlanDeleteWhenRemovedInYazio(t *testing.T) {
 	}
 }
 
-func TestPlanNeverTouchesForeignPoints(t *testing.T) {
-	foreign := existingPoint("a1b2c3d4-server-generated", 250)
-
-	actions := Plan(nil, []domain.Point{foreign})
-
-	if len(actions) != 0 {
-		t.Fatalf("got %+v, want no actions on foreign points", actions)
-	}
-}
-
-// mealPointFor constructs a point with a specific meal type (needed now that
-// the planner uses (date, meal, type) as a semantic fallback key).
 func mealPointFor(id string, meal domain.Meal, kcal float64) domain.Point {
 	return domain.Point{
 		ID:     id,
@@ -105,10 +102,15 @@ func mealPointFor(id string, meal domain.Meal, kcal float64) domain.Point {
 	}
 }
 
-func existingMealPoint(id string, meal domain.Meal, kcal float64) domain.Point {
-	p := mealPointFor(id, meal, kcal)
-	p.Name = "users/u1/dataTypes/nutrition-log/dataPoints/" + id
-	return p
+func existingMealPoint(serverID string, meal domain.Meal, kcal float64) domain.Point {
+	return domain.Point{
+		ID:     serverID,
+		Name:   "users/u1/dataTypes/nutrition-log/dataPoints/" + serverID,
+		Type:   domain.NutritionPoint,
+		Date:   "2026-06-10",
+		Meal:   meal,
+		Macros: domain.Macros{EnergyKcal: kcal, CarbsG: 17, ProteinG: 27, FatG: 27},
+	}
 }
 
 func TestPlanMixedDay(t *testing.T) {
@@ -118,9 +120,9 @@ func TestPlanMixedDay(t *testing.T) {
 		{ID: "yazio-2026-06-10-water", Type: domain.HydrationPoint, Date: "2026-06-10", WaterML: 1650},
 	}
 	existing := []domain.Point{
-		existingMealPoint("yazio-2026-06-10-lunch", domain.Lunch, 408),   // changed -> patch
-		existingMealPoint("yazio-2026-06-10-dinner", domain.Dinner, 783), // removed -> delete
-		{ID: "yazio-2026-06-10-water", Name: "users/u1/dataTypes/hydration-log/dataPoints/yazio-2026-06-10-water", Type: domain.HydrationPoint, Date: "2026-06-10", WaterML: 1650}, // same -> skip
+		existingMealPoint("1000000001", domain.Lunch, 408),   // changed → patch
+		existingMealPoint("1000000002", domain.Dinner, 783),  // no desired counterpart → untouched
+		{ID: "2000000001", Name: "users/u1/dataTypes/hydration-log/dataPoints/2000000001", Type: domain.HydrationPoint, Date: "2026-06-10", WaterML: 1650},
 	}
 
 	actions := Plan(desired, existing)
@@ -132,7 +134,7 @@ func TestPlanMixedDay(t *testing.T) {
 	want := map[string]Op{
 		"yazio-2026-06-10-breakfast": OpCreate,
 		"yazio-2026-06-10-lunch":     OpPatch,
-		"yazio-2026-06-10-dinner":    OpDelete,
+		"1000000002":                 OpDelete,
 		"yazio-2026-06-10-water":     OpSkip,
 	}
 	if len(got) != len(want) {
@@ -142,48 +144,6 @@ func TestPlanMixedDay(t *testing.T) {
 		if got[id] != op {
 			t.Errorf("%s: op = %s, want %s", id, got[id], op)
 		}
-	}
-}
-
-func TestPlanSemanticFallbackWhenAPIAssignsServerID(t *testing.T) {
-	// The Google Health API may assign a server UUID instead of preserving our
-	// client ID. The planner must match by (date, type, meal) so the second
-	// run skips instead of creating a duplicate.
-	serverIDPoint := domain.Point{
-		ID:     "server-uuid-abc",
-		Name:   "users/me/dataTypes/nutrition-log/dataPoints/server-uuid-abc",
-		Type:   domain.NutritionPoint,
-		Date:   "2026-06-10",
-		Meal:   domain.Lunch,
-		Macros: domain.Macros{EnergyKcal: 408, CarbsG: 17, ProteinG: 27, FatG: 27},
-	}
-	desired := []domain.Point{nutritionPoint("yazio-2026-06-10-lunch", 408)}
-
-	actions := Plan(desired, []domain.Point{serverIDPoint})
-
-	if len(actions) != 1 || actions[0].Op != OpSkip {
-		t.Fatalf("got %+v, want one skip (semantic fallback matched server-assigned UUID)", actions)
-	}
-}
-
-func TestPlanSemanticFallbackPatchesChangedServerIDPoint(t *testing.T) {
-	serverIDPoint := domain.Point{
-		ID:     "server-uuid-abc",
-		Name:   "users/me/dataTypes/nutrition-log/dataPoints/server-uuid-abc",
-		Type:   domain.NutritionPoint,
-		Date:   "2026-06-10",
-		Meal:   domain.Lunch,
-		Macros: domain.Macros{EnergyKcal: 300, CarbsG: 17, ProteinG: 27, FatG: 27},
-	}
-	desired := []domain.Point{nutritionPoint("yazio-2026-06-10-lunch", 408)}
-
-	actions := Plan(desired, []domain.Point{serverIDPoint})
-
-	if len(actions) != 1 || actions[0].Op != OpPatch {
-		t.Fatalf("got %+v, want one patch via semantic fallback", actions)
-	}
-	if actions[0].Existing.Name != serverIDPoint.Name {
-		t.Errorf("patch uses wrong name: %s", actions[0].Existing.Name)
 	}
 }
 

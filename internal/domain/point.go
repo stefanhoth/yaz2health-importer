@@ -1,7 +1,5 @@
 package domain
 
-import "strings"
-
 // PointType is the Google Health data type a Point belongs to.
 type PointType string
 
@@ -10,10 +8,6 @@ const (
 	HydrationPoint PointType = "hydration-log"
 )
 
-// OwnedIDPrefix marks data points managed by this importer. Points without
-// it are never patched or deleted.
-const OwnedIDPrefix = "yazio-"
-
 // Point is the normalized form of one Google Health data point, used both
 // for the desired state (mapped from Yazio) and the existing state (read
 // back from Google). Comparing two Points ignores Name and interval times;
@@ -21,6 +15,8 @@ const OwnedIDPrefix = "yazio-"
 type Point struct {
 	// ID is the deterministic client-provided data point ID,
 	// e.g. "yazio-2026-06-11-lunch" or "yazio-2026-06-11-water".
+	// Note: Google Health ignores this on Create and assigns a server-generated
+	// numeric ID; the ID is only reliable on points in the desired state.
 	ID string
 	// Name is the full resource name. Only set on points read from Google.
 	Name string
@@ -31,11 +27,6 @@ type Point struct {
 	Meal    Meal
 	Macros  Macros
 	WaterML float64
-}
-
-// Owned reports whether this importer manages the point.
-func (p Point) Owned() bool {
-	return strings.HasPrefix(p.ID, OwnedIDPrefix)
 }
 
 // valueTolerance absorbs float rounding between what we write and what the

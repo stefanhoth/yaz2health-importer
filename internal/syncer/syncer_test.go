@@ -133,9 +133,9 @@ func TestRunSecondSyncIsIdempotent(t *testing.T) {
 func TestRunPatchesChangedAndDeletesRemoved(t *testing.T) {
 	sink := &fakeSink{existing: []domain.Point{
 		existingLunch("2026-06-10", 408), // value will change -> patch
-		{ // water removed in Yazio -> delete
-			ID:      "yazio-2026-06-10-water",
-			Name:    "users/me/dataTypes/hydration-log/dataPoints/yazio-2026-06-10-water",
+		{ // water no longer in Yazio -> delete (API protects foreign points)
+			ID:      "9999999999",
+			Name:    "users/me/dataTypes/hydration-log/dataPoints/9999999999",
 			Type:    domain.HydrationPoint,
 			Date:    "2026-06-10",
 			WaterML: 500,

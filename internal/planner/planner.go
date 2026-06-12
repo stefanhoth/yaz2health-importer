@@ -29,8 +29,8 @@ type Action struct {
 	Existing domain.Point
 }
 
-// semKey identifies a point by its content rather than its API-assigned ID.
-// Used as fallback when the Google Health API does not preserve our client IDs.
+// semKey identifies a point by (date, type, meal). Google Health does not
+// preserve client-provided IDs, so this is the sole matching key.
 type semKey struct {
 	date, meal string
 	t          domain.PointType
@@ -41,23 +41,13 @@ func semKeyOf(p domain.Point) semKey {
 }
 
 // Plan diffs desired against existing points. Both slices must cover the same
-// date range. Matching uses two passes:
-//  1. Client ID ("yazio-…" prefix) — fast path, exact match.
-//  2. Semantic key (date + type + meal) — fallback for when the API assigns
-//     server-side UUIDs instead of preserving our client ID.
-//
-// Existing points that match neither pass (e.g. logged manually in the Health
-// app) are left untouched. Actions are ordered by point ID for stable output.
+// date range. Each desired point is matched against existing by semantic key
+// (date + type + meal); unmatched desired points are created, matched points
+// are skipped or patched. Existing points with no desired counterpart are
+// marked for deletion — the API enforces ownership and will silently reject
+// attempts to delete points created by other apps or the user directly.
+// Actions are ordered by point ID for stable output.
 func Plan(desired, existing []domain.Point) []Action {
-	existingByID := make(map[string]domain.Point, len(existing))
-	for _, p := range existing {
-		if p.Owned() {
-			existingByID[p.ID] = p
-		}
-	}
-
-	// Semantic index covers every existing point so the fallback can match
-	// even server-assigned UUIDs as long as date+type+meal align.
 	existingBySem := make(map[semKey]domain.Point, len(existing))
 	for _, p := range existing {
 		existingBySem[semKeyOf(p)] = p
@@ -65,10 +55,7 @@ func Plan(desired, existing []domain.Point) []Action {
 
 	var actions []Action
 	for _, want := range desired {
-		have, ok := existingByID[want.ID]
-		if !ok {
-			have, ok = existingBySem[semKeyOf(want)]
-		}
+		have, ok := existingBySem[semKeyOf(want)]
 		switch {
 		case !ok:
 			actions = append(actions, Action{Op: OpCreate, Desired: want})
@@ -77,12 +64,10 @@ func Plan(desired, existing []domain.Point) []Action {
 		default:
 			actions = append(actions, Action{Op: OpPatch, Desired: want, Existing: have})
 		}
-		delete(existingByID, want.ID)
 		delete(existingBySem, semKeyOf(want))
 	}
 
-	// Owned points with no desired counterpart were removed in Yazio.
-	for _, have := range existingByID {
+	for _, have := range existingBySem {
 		actions = append(actions, Action{Op: OpDelete, Existing: have})
 	}
 
