@@ -55,7 +55,7 @@ launchd/          — two plist jobs (backfill daily, hourly today-sync)
 
 ## Key behaviours to preserve
 
-- **Idempotency**: re-running sync must never create duplicates. The planner's two-level match (client ID → semantic fallback on date+meal+type) is the guarantee.
-- **Foreign points untouched**: points without a `yazio-` ID prefix are never modified or deleted.
+- **Idempotency**: re-running sync must never create duplicates. The planner matches by semantic key `(date, type, meal)` — Google Health does not preserve client-provided IDs, so this is the sole dedup mechanism.
+- **API-enforced ownership**: the planner emits `OpDelete` for all unmatched existing points; the API itself rejects deletes for foreign points (`DATA_POINT_NOT_OWNED_BY_CLIENT`, `USER_DEFINED_CONTENT`) and those are silently skipped.
 - **Patch fallback**: if Google Health returns 500 on Patch, the syncer falls back to delete + create automatically.
 - **Rate limiting**: the syncer sleeps `Throttle` (default 300 ms) between Yazio fetches on multi-day ranges.
