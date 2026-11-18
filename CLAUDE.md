@@ -3,7 +3,7 @@
 ## Workflow
 
 - **Always work on a branch.** Never commit directly to `main`.
-- **Open a PR for every change**, no matter how small. Merge via GitHub (or `gh pr merge`).
+- **Open a PR for every change**, no matter how small. After opening a PR, enable auto-merge (`gh pr merge --auto --squash`): it merges once the required checks are green. Opt out with a draft PR or the label `hold`.
 - Follow **Conventional Commits** for branch names, commit messages, and PR titles:
 
 | Type | When to use |
